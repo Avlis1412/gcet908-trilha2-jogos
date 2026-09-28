@@ -1,0 +1,131 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Desenvolvedora {
+  id        Int       @id @default(autoincrement())
+  nome      String    @unique
+  pais      String?
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+  jogos     Jogo[]
+
+  @@map("desenvolvedoras")
+}
+
+model Genero {
+  id        Int          @id @default(autoincrement())
+  nome      String       @unique
+  createdAt DateTime     @default(now()) @map("created_at")
+  updatedAt DateTime     @updatedAt @map("updated_at")
+  deletedAt DateTime?    @map("deleted_at")
+  jogos     JogoGenero[]
+
+  @@map("generos")
+}
+
+model Plataforma {
+  id        Int              @id @default(autoincrement())
+  nome      String           @unique
+  createdAt DateTime         @default(now()) @map("created_at")
+  updatedAt DateTime         @updatedAt @map("updated_at")
+  deletedAt DateTime?        @map("deleted_at")
+  jogos     JogoPlataforma[]
+
+  @@map("plataformas")
+}
+
+model Usuario {
+  id          Int          @id @default(autoincrement())
+  nome        String
+  email       String       @unique
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+  deletedAt   DateTime?    @map("deleted_at")
+  avaliacoes  Avaliacao[]
+  bibliotecas Biblioteca[]
+
+  @@map("usuarios")
+}
+
+model Jogo {
+  id               Int              @id @default(autoincrement())
+  titulo           String
+  anoLancamento    Int?             @map("ano_lancamento")
+  preco            Decimal          @default(0.00) @db.Decimal(10, 2)
+  descricao        String?
+  desenvolvedoraId Int              @map("desenvolvedora_id")
+  createdAt        DateTime         @default(now()) @map("created_at")
+  updatedAt        DateTime         @updatedAt @map("updated_at")
+  deletedAt        DateTime?        @map("deleted_at")
+  desconto         Decimal?         @default(0.00) @db.Decimal(10, 2)
+  avaliacoes       Avaliacao[]
+  bibliotecas      Biblioteca[]
+  generos          JogoGenero[]
+  plataformas      JogoPlataforma[]
+  desenvolvedora   Desenvolvedora   @relation(fields: [desenvolvedoraId], references: [id])
+
+  @@index([titulo])
+  @@index([desenvolvedoraId])
+  @@map("jogos")
+}
+
+model JogoGenero {
+  jogoId   Int    @map("jogo_id")
+  generoId Int    @map("genero_id")
+  genero   Genero @relation(fields: [generoId], references: [id], onDelete: Cascade)
+  jogo     Jogo   @relation(fields: [jogoId], references: [id], onDelete: Cascade)
+
+  @@id([jogoId, generoId])
+  @@map("jogo_genero")
+}
+
+model JogoPlataforma {
+  jogoId       Int        @map("jogo_id")
+  plataformaId Int        @map("plataforma_id")
+  jogo         Jogo       @relation(fields: [jogoId], references: [id], onDelete: Cascade)
+  plataforma   Plataforma @relation(fields: [plataformaId], references: [id], onDelete: Cascade)
+
+  @@id([jogoId, plataformaId])
+  @@map("jogo_plataforma")
+}
+
+model Biblioteca {
+  id            Int       @id @default(autoincrement())
+  usuarioId     Int       @map("usuario_id")
+  jogoId        Int       @map("jogo_id")
+  horasJogadas  Decimal   @default(0.0) @map("horas_jogadas") @db.Decimal(6, 1)
+  dataAquisicao DateTime  @default(now()) @map("data_aquisicao")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  deletedAt     DateTime? @map("deleted_at")
+  jogo          Jogo      @relation(fields: [jogoId], references: [id], onDelete: Cascade)
+  usuario       Usuario   @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@unique([usuarioId, jogoId])
+  @@index([usuarioId])
+  @@map("bibliotecas")
+}
+
+model Avaliacao {
+  id         Int       @id @default(autoincrement())
+  usuarioId  Int       @map("usuario_id")
+  jogoId     Int       @map("jogo_id")
+  nota       Int
+  comentario String?
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+  deletedAt  DateTime? @map("deleted_at")
+  jogo       Jogo      @relation(fields: [jogoId], references: [id], onDelete: Cascade)
+  usuario    Usuario   @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@unique([usuarioId, jogoId])
+  @@index([jogoId])
+  @@map("avaliacoes")
+}

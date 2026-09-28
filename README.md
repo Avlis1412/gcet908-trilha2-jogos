@@ -1,57 +1,133 @@
-# 🎮 GCET908 - Trilha 02: Plataforma de Jogos
+# 🎮 GCET908 - Trilha 02: Plataforma de Jogos (Prisma ORM)
 
-API REST completa para uma Plataforma de Jogos (estilo Steam), com modelagem relacional e persistência em PostgreSQL, desenvolvida como parte da disciplina GCET908 — Desenvolvimento de Software II.
+API REST completa para uma **Plataforma de Jogos** (estilo Steam), com modelagem relacional, migrations versionadas via **Prisma ORM** e persistência em **PostgreSQL**. Desenvolvida para o **Trabalho 2** da disciplina **GCET908 — Desenvolvimento de Software II**.
 
 ---
 
 ## 🎯 Objetivo
 
-Projetar um modelo relacional adequado ao domínio de jogos, escrever consultas SQL corretas e eficientes, e implementar uma API Node.js/Express que se conecta ao banco de dados para executar operações de persistência (CRUD).
+Evoluir a API do Trabalho 1 (SQL puro) para utilizar **Prisma ORM**, com schema versionado por migrations, seed reprodutível e tratamento adequado de erros de integridade.
 
 ---
 
 ## 🗂️ Estrutura do Projeto
 
+```
 gcet908-trilha2-jogos/
-│
-├── database/                     # Scripts SQL
-│   ├── schema.sql               # DDL: tabelas, índices, constraints
-│   ├── seed.sql                 # DML: dados iniciais para testes
-│   └── queries.sql              # Consultas de referência
-│
-├── src/                          # Código da API
+├── database/                    # Scripts SQL do Trabalho 1 (referência histórica)
+│   ├── schema.sql
+│   ├── seed.sql
+│   └── queries.sql
+├── prisma/
+│   ├── migrations/              # Migrations versionadas
+│   │   ├── ..._initial_schema/
+│   │   └── ..._add_desconto_jogo/
+│   ├── schema.prisma            # Fonte da verdade do modelo
+│   └── seed.js                  # Seed com 10+ registros por tabela
+├── src/
 │   ├── config/
-│   │   └── db.js                # Conexão com PostgreSQL (Pool)
-│   ├── repositories/            # SQL puro parametrizado
-│   │   ├── jogosRepository.js
-│   │   ├── usuariosRepository.js
-│   │   └── avaliacoesRepository.js
+│   │   └── prisma.js            # Cliente Prisma com log de queries
+│   ├── errors/
+│   │   └── AppError.js          # Erro customizado
+│   ├── middlewares/
+│   │   └── errorHandler.js      # Tradução de erros do Prisma → HTTP
+│   ├── repositories/            # Acesso a dados via Prisma Client
 │   ├── controllers/             # Lógica dos endpoints
-│   │   ├── jogosController.js
-│   │   ├── usuariosController.js
-│   │   └── avaliacoesController.js
-│   ├── routes/                  # Definição das rotas
-│   │   ├── jogosRoutes.js
-│   │   ├── usuariosRoutes.js
-│   │   └── avaliacoesRoutes.js
-│   └── server.js                # Ponto de entrada Express
-│
-├── .env.example                  # Exemplo de variáveis de ambiente
-├── .gitignore
+│   ├── routes/                  # Rotas da API
+│   └── server.js                # Express configurado
+├── docker-compose.yml           # Bônus: banco executável em container
+├── .env.example
 ├── package.json
 └── README.md
+```
 
 ---
 
-## 🗺️ Modelo Relacional (DER)
+## 🗺️ Diagrama Entidade-Relacionamento (DER)
 
-O domínio é composto pelas seguintes entidades e relacionamentos:
+```mermaid
+erDiagram
+    DESENVOLVEDORA ||--o{ JOGO : desenvolve
+    JOGO ||--o{ JOGO_GENERO : pertence
+    GENERO ||--o{ JOGO_GENERO : classifica
+    JOGO ||--o{ JOGO_PLATAFORMA : disponivel
+    PLATAFORMA ||--o{ JOGO_PLATAFORMA : hospeda
+    USUARIO ||--o{ BIBLIOTECA : possui
+    JOGO ||--o{ BIBLIOTECA : esta_em
+    USUARIO ||--o{ AVALIACAO : avalia
+    JOGO ||--o{ AVALIACAO : recebe
 
-- Desenvolvedora (1:N) Jogo
-- Jogo (N:N) Gênero — tabela associativa jogo_genero
-- Jogo (N:N) Plataforma — tabela associativa jogo_plataforma
-- Usuário (1:N) Biblioteca (N:N com Jogo, com atributos horas_jogadas e data_aquisicao)
-- Usuário (1:N) Avaliação (N:N com Jogo, com nota e comentario)
+    DESENVOLVEDORA {
+        int id PK
+        string nome UK
+        string pais
+        datetime created_at
+        datetime updated_at
+        datetime deleted_at
+    }
+    JOGO {
+        int id PK
+        string titulo
+        int ano_lancamento
+        decimal preco
+        decimal desconto
+        string descricao
+        int desenvolvedora_id FK
+        datetime created_at
+        datetime updated_at
+        datetime deleted_at
+    }
+    GENERO {
+        int id PK
+        string nome UK
+        datetime created_at
+        datetime updated_at
+        datetime deleted_at
+    }
+    PLATAFORMA {
+        int id PK
+        string nome UK
+        datetime created_at
+        datetime updated_at
+        datetime deleted_at
+    }
+    JOGO_GENERO {
+        int jogo_id PK,FK
+        int genero_id PK,FK
+    }
+    JOGO_PLATAFORMA {
+        int jogo_id PK,FK
+        int plataforma_id PK,FK
+    }
+    USUARIO {
+        int id PK
+        string nome
+        string email UK
+        datetime created_at
+        datetime updated_at
+        datetime deleted_at
+    }
+    BIBLIOTECA {
+        int id PK
+        int usuario_id FK
+        int jogo_id FK
+        decimal horas_jogadas
+        datetime data_aquisicao
+        datetime created_at
+        datetime updated_at
+        datetime deleted_at
+    }
+    AVALIACAO {
+        int id PK
+        int usuario_id FK
+        int jogo_id FK
+        int nota
+        string comentario
+        datetime created_at
+        datetime updated_at
+        datetime deleted_at
+    }
+```
 
 ---
 
@@ -63,165 +139,218 @@ O domínio é composto pelas seguintes entidades e relacionamentos:
 - PostgreSQL 14+
 - Git
 
-### 1. Clonar o repositório
+### 1. Clonar e instalar
 
+```bash
 git clone https://github.com/Avlis1412/gcet908-trilha2-jogos.git
 cd gcet908-trilha2-jogos
-
-### 2. Configurar o banco de dados
-
-Crie o banco no PostgreSQL:
-
-CREATE DATABASE jogos_db;
-
-Abra o Query Tool do pgAdmin conectado ao banco jogos_db e execute, na ordem:
-
-1. database/schema.sql — cria as tabelas, índices e constraints
-2. database/seed.sql — popula o banco com dados de teste
-
-### 3. Configurar variáveis de ambiente
-
-Copie o arquivo de exemplo:
-
-cp .env.example .env
-
-Edite o .env com suas credenciais:
-
-PORT=3000
-DATABASE_URL="postgresql://postgres:SUA_SENHA@localhost:5432/jogos_db"
-
-### 4. Instalar dependências
-
 npm install
+```
 
-### 5. Rodar a API
+### 2. Configurar o `.env`
 
-npm run dev
+Crie o arquivo `.env` a partir do exemplo:
+
+```bash
+cp .env.example .env
+```
+
+Edite com suas credenciais:
+
+```env
+PORT=3000
+DATABASE_URL="postgresql://postgres:SUA_SENHA@localhost:5432/jogos_db?schema=public"
+```
+
+### 3. Criar o banco
+
+```sql
+CREATE DATABASE jogos_db;
+```
+
+### 4. Rodar as migrations
+
+```bash
+npx prisma migrate dev
+```
+
+Isso aplica **todas as migrations versionadas** e gera o Prisma Client.
+
+### 5. Popular o banco (seed)
+
+```bash
+npx prisma db seed
+```
 
 Saída esperada:
 
-✅ Conectado ao PostgreSQL (jogos_db)
+```
+🌱 Iniciando seed...
+✅ Seed concluído: {
+  desenvolvedoras: 10,
+  generos: 10,
+  plataformas: 10,
+  usuarios: 10,
+  jogos: 12,
+  bibliotecas: 15,
+  avaliacoes: 19
+}
+```
+
+### 6. Rodar a API
+
+```bash
+npm run dev
+```
+
+Saída esperada:
+
+```
 🚀 Servidor rodando em http://localhost:3000
+prisma:info Starting a postgresql pool with 9 connections.
+```
 
 ---
 
-## 📡 Endpoints da API
+## 🐳 Alternativa com Docker (bônus)
+
+Se preferir, suba o banco via Docker Compose:
+
+```bash
+docker compose up -d
+```
+
+Isso cria um PostgreSQL 16 na porta 5432 com usuário `postgres`, senha `postgres` e banco `jogos_db`.
+
+---
+
+## 📡 Endpoints
 
 ### 🎮 Jogos
 
 | Método | Rota | Descrição |
 |--------|------|-----------|
-| GET | /api/jogos | Lista jogos (com filtro titulo, genero e paginação page, limit) |
-| GET | /api/jogos/:id | Detalhes de um jogo (com gêneros, plataformas e média de avaliações) |
-| GET | /api/jogos/top-avaliados | Top 5 jogos mais bem avaliados |
-| POST | /api/jogos | Cria novo jogo |
-| PUT | /api/jogos/:id | Atualiza jogo |
-| DELETE | /api/jogos/:id | Remove jogo |
+| GET | `/api/jogos` | Lista com paginação, filtro e ordenação |
+| GET | `/api/jogos/:id` | Detalhes com relacionamentos |
+| GET | `/api/jogos/top-avaliados` | Top 5 (via SQL puro) |
+| POST | `/api/jogos` | Cria jogo |
+| PUT | `/api/jogos/:id` | Atualiza jogo |
+| DELETE | `/api/jogos/:id` | Soft delete (deleted_at) |
 
-Exemplo de body (POST/PUT):
+**Filtros e ordenação:**
 
+```
+GET /api/jogos?titulo=zelda&genero=Aventura&page=1&limit=5&ordenar=preco&direcao=desc
+```
+
+**Body de criação:**
+
+```json
 {
   "titulo": "Hollow Knight",
   "ano_lancamento": 2017,
   "preco": 46.99,
-  "desenvolvedora_id": 1
+  "desenvolvedora_id": 9,
+  "descricao": "Metroidvania indie"
 }
+```
 
 ### 👤 Usuários
 
 | Método | Rota | Descrição |
 |--------|------|-----------|
-| GET | /api/usuarios | Lista usuários |
-| GET | /api/usuarios/:id/biblioteca | Lista jogos da biblioteca do usuário |
+| GET | `/api/usuarios` | Lista usuários |
+| GET | `/api/usuarios/:id` | Busca por ID |
+| GET | `/api/usuarios/:id/biblioteca` | Biblioteca do usuário |
+| POST | `/api/usuarios` | Cria usuário |
+| PUT | `/api/usuarios/:id` | Atualiza |
+| DELETE | `/api/usuarios/:id` | Soft delete |
 
 ### ⭐ Avaliações
 
 | Método | Rota | Descrição |
 |--------|------|-----------|
-| POST | /api/avaliacoes | Registra ou atualiza avaliação (UPSERT via ON CONFLICT) |
-| GET | /api/avaliacoes/jogo/:jogoId | Lista avaliações de um jogo |
-
-Exemplo de body (POST):
-
-{
-  "usuario_id": 1,
-  "jogo_id": 3,
-  "nota": 5,
-  "comentario": "Excelente RPG!"
-}
+| POST | `/api/avaliacoes` | Registra/atualiza avaliação (UPSERT transacional) |
+| GET | `/api/avaliacoes/jogo/:jogoId` | Avaliações de um jogo |
 
 ---
 
 ## ⚙️ Boas Práticas Aplicadas
 
-### 🔒 Segurança
+### ORM e Migrations
+- **Schema declarativo** (`schema.prisma`) como fonte da verdade
+- **2 migrations versionadas**: `initial_schema` e `add_desconto_jogo`
+- **Seed generoso** com 10+ registros por tabela principal
+- **Prisma Client** gerado automaticamente
 
-- Consultas parametrizadas ($1, $2, ...) — proteção contra SQL Injection
-- Variáveis de ambiente — credenciais fora do código-fonte
-- .env no .gitignore — senha nunca vai para o repositório
+### Integridade e Transações
+- **Validação de FK** antes de criar avaliações (transação)
+- **UPSERT** com `ON CONFLICT` para avaliações idempotentes
+- **Soft delete** via `deletedAt` — bonificação
+- **Erros do Prisma traduzidos**: P2002 → 409, P2003 → 409, P2025 → 404
 
-### 🚀 Performance
+### Performance
+- **Log de SQL ativado** (`log: ['query']`) — todas as queries visíveis
+- **Batching automático** do Prisma (evita N+1)
+- **Índices** em `titulo`, `desenvolvedora_id`, `usuario_id`, `jogo_id`
+- **Paginação real** no banco (`skip`/`take`)
+- **Filtros dinâmicos** aplicados no SQL (não em memória)
 
-- Pool de conexões (pg.Pool) — reutilização de conexões
-- Índices em colunas de busca (titulo) e chaves estrangeiras
-- Paginação com LIMIT/OFFSET (evita carregar tudo de uma vez)
-- Filtros dinâmicos com WHERE ($1::text IS NULL OR ...) — um único SQL serve para várias combinações
+### Arquitetura
+- **Separação em camadas**: routes → controllers → repositories
+- **Controllers enxutos** (não contêm SQL)
+- **Middleware de erro** centralizado
+- **AppError** para erros de negócio
 
-### 🏗️ Arquitetura
-
-- Separação em camadas: routes → controllers → repositories
-- Tratamento de erros centralizado no server.js
-- Repository pattern — isola o SQL do restante do código
-- UPSERT com ON CONFLICT para operações idempotentes
-
-### 🗄️ Banco de Dados
-
-- Constraints: CHECK, UNIQUE, NOT NULL, FOREIGN KEY
-- ON DELETE CASCADE em tabelas dependentes
-- TIMESTAMPTZ para auditoria (criado_em, data_aquisicao)
-- NUMERIC(10,2) para valores monetários (precisão exata)
+### Auditoria
+- `created_at`, `updated_at` (com `@updatedAt`) e `deleted_at` em todas as tabelas principais
 
 ---
 
-## 🛠️ Tecnologias Utilizadas
+## 🧪 Testando Erros de Integridade
+
+**UNIQUE violation (409):**
+```bash
+curl -X POST http://localhost:3000/api/usuarios \
+  -H "Content-Type: application/json" \
+  -d '{"nome":"Teste","email":"ana@email.com"}'
+```
+→ `{"erro":"Valor duplicado no campo: email","tipo":"unique_violation"}`
+
+**FK violation (409):**
+```bash
+curl -X POST http://localhost:3000/api/jogos \
+  -H "Content-Type: application/json" \
+  -d '{"titulo":"X","ano_lancamento":2024,"preco":10,"desenvolvedora_id":99999}'
+```
+→ `{"erro":"Operação viola integridade referencial","tipo":"foreign_key_violation"}`
+
+**404:**
+```bash
+curl http://localhost:3000/api/jogos/99999
+```
+→ `{"erro":"Jogo não encontrado","tipo":"app_error"}`
+
+---
+
+## 🛠️ Tecnologias
 
 | Camada | Tecnologia |
 |--------|------------|
-| Banco de Dados | PostgreSQL 14 |
-| Linguagem SQL | DDL, DML, DQL |
+| Banco | PostgreSQL 16 |
+| ORM | **Prisma 6.19.3** |
 | Runtime | Node.js 18+ |
-| Framework Web | Express |
-| Driver PostgreSQL | pg |
-| Variáveis de Ambiente | dotenv |
-| CORS | cors |
+| Framework | Express |
 | Dev | nodemon |
-| Versionamento | Git & GitHub |
-
----
-
-## 📸 Evidências de Execução
-
-- ✅ Conexão com jogos_db estabelecida
-- ✅ Endpoints testados no navegador (listagem, busca por ID, top avaliados, biblioteca)
-- ✅ Push realizado para o GitHub
-
----
-
-## 📌 Próximos Passos (Trabalho 2)
-
-- Refatorar a API para utilizar Prisma ORM (Videoaula 4)
-- Comparar as abordagens: SQL puro vs ORM
-- Analisar trade-offs de produtividade e desempenho
+| Container | Docker Compose |
 
 ---
 
 ## 👤 Autor
 
-Adriano Rodrigues da Silva
-
+**Adriano Rodrigues da Silva**
 - Matrícula: 2025133735
-- Curso: Licenciatura em Computação (EaD/UAB)
-- Instituição: UFRB — Universidade Federal do Recôncavo da Bahia
+- Curso: Licenciatura em Computação (EaD/UAB) — UFRB
 - Disciplina: GCET908 — Desenvolvimento de Software II
 - Professor: Tássio Valle
 
@@ -229,4 +358,4 @@ Adriano Rodrigues da Silva
 
 ## 📄 Licença
 
-Este projeto foi desenvolvido para fins acadêmicos na disciplina GCET908.
+Projeto acadêmico desenvolvido para a disciplina GCET908.

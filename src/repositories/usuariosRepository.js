@@ -1,25 +1,47 @@
-const db = require('../config/db');
+const prisma = require('../config/prisma');
 
 module.exports = {
   async listar() {
-    const { rows } = await db.query('SELECT id, nome, email FROM usuarios ORDER BY nome;');
-    return rows;
+    return prisma.usuario.findMany({
+      where: { deletedAt: null },
+      select: { id: true, nome: true, email: true, createdAt: true },
+      orderBy: { nome: 'asc' },
+    });
+  },
+
+  async buscarPorId(id) {
+    return prisma.usuario.findFirst({
+      where: { id: Number(id), deletedAt: null },
+    });
   },
 
   async biblioteca(usuarioId) {
-    const sql = `
-      SELECT 
-        j.titulo,
-        b.horas_jogadas,
-        b.data_aquisicao,
-        d.nome AS desenvolvedora
-      FROM bibliotecas b
-      JOIN jogos j ON b.jogo_id = j.id
-      JOIN desenvolvedoras d ON j.desenvolvedora_id = d.id
-      WHERE b.usuario_id = $1
-      ORDER BY b.data_aquisicao DESC;
-    `;
-    const { rows } = await db.query(sql, [usuarioId]);
-    return rows;
+    return prisma.biblioteca.findMany({
+      where: { usuarioId: Number(usuarioId), deletedAt: null },
+      include: {
+        jogo: {
+          include: { desenvolvedora: true },
+        },
+      },
+      orderBy: { dataAquisicao: 'desc' },
+    });
+  },
+
+  async criar({ nome, email }) {
+    return prisma.usuario.create({ data: { nome, email } });
+  },
+
+  async atualizar(id, { nome, email }) {
+    return prisma.usuario.update({
+      where: { id: Number(id) },
+      data: { nome, email },
+    });
+  },
+
+  async remover(id) {
+    return prisma.usuario.update({
+      where: { id: Number(id) },
+      data: { deletedAt: new Date() },
+    });
   },
 };
