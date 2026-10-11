@@ -1,137 +1,187 @@
-# 🎮 GCET908 - Trilha 02: Plataforma de Jogos (Prisma ORM)
+# GCET908 - Refatoração da API em Camadas
 
-API REST completa para uma **Plataforma de Jogos** (estilo Steam), com modelagem relacional, migrations versionadas via **Prisma ORM** e persistência em **PostgreSQL**. Desenvolvida para o **Trabalho 2** da disciplina **GCET908 — Desenvolvimento de Software II**.
+API REST de uma **Plataforma de Jogos** refatorada para uma **arquitetura em camadas** com separação clara de responsabilidades, aplicando o padrão **MVC** no ambiente web. Desenvolvida para o **Trabalho 3** da disciplina **GCET908 — Desenvolvimento de Software II**.
 
----
-
-## 🎯 Objetivo
-
-Evoluir a API do Trabalho 1 (SQL puro) para utilizar **Prisma ORM**, com schema versionado por migrations, seed reprodutível e tratamento adequado de erros de integridade.
+O objetivo central é **reduzir o acoplamento** entre as partes do sistema e **aumentar a testabilidade** do código, isolando cada responsabilidade em sua própria camada.
 
 ---
 
-## 🗂️ Estrutura do Projeto
+## Objetivo
 
+Atender ao requisito: *"Separar rotas, controladores, serviços e repositórios, reduzindo o acoplamento e aumentando a testabilidade do código."*
+
+A API mantém **comportamento externo idêntico** à versão anterior (Trabalho 2) — os endpoints continuam funcionando da mesma forma. O que muda é a **organização interna** do código.
+
+---
+
+## Arquitetura em Camadas
+
+O projeto está organizado em camadas com responsabilidades bem definidas:
+
+```text
+HTTP → routes → controllers → services → repositories → PostgreSQL
 ```
-gcet908-trilha2-jogos/
-├── database/                    # Scripts SQL do Trabalho 1 (referência histórica)
+
+| Camada | Responsabilidade | Não faz |
+|---|---|---|
+| `routes/` | Define URLs e delega para controllers | Lógica de negócio |
+| `controllers/` | Traduz HTTP ↔ domínio (lê `req`, chama service, responde `res`) | Regras de negócio, SQL |
+| `services/` | Contém regras de negócio e orquestração | Conhecer HTTP (`req`/`res`) |
+| `repositories/` | Isola o acesso ao Prisma | Regras de negócio |
+| `middlewares/` | Preocupações transversais (erros) | Lógica de negócio |
+
+### Diagrama das Camadas
+
+```mermaid
+flowchart TD
+    Cliente([Cliente HTTP])
+    Routes[Routes<br/>Definição de URLs]
+    Controllers[Controllers<br/>Tradução HTTP ↔ Domínio]
+    Services[Services<br/>Regras de Negócio]
+    Repositories[Repositories<br/>Acesso a Dados]
+    Prisma[(Prisma ORM)]
+    DB[(PostgreSQL)]
+    Middleware[Middleware de Erros<br/>Preocupação Transversal]
+
+    Cliente -->|requisição| Routes
+    Routes --> Controllers
+    Controllers --> Services
+    Services --> Repositories
+    Repositories --> Prisma
+    Prisma --> DB
+    DB -.resposta.-> Prisma
+    Prisma -.resposta.-> Repositories
+    Repositories -.resposta.-> Services
+    Services -.resposta.-> Controllers
+    Controllers -.resposta.-> Routes
+    Routes -.resposta.-> Cliente
+
+    Controllers -.erro.-> Middleware
+    Services -.erro.-> Middleware
+    Repositories -.erro.-> Middleware
+    Middleware -.resposta de erro.-> Cliente
+
+    style Cliente fill:#4A90E2,color:#fff
+    style Routes fill:#7B68EE,color:#fff
+    style Controllers fill:#50C878,color:#fff
+    style Services fill:#FFB84D,color:#000
+    style Repositories fill:#E85D75,color:#fff
+    style Prisma fill:#9B59B6,color:#fff
+    style DB fill:#34495E,color:#fff
+    style Middleware fill:#95A5A6,color:#fff
+```
+
+### Regra fundamental
+
+**Nenhuma camada acessa outra pulando níveis.** O controller não fala com o repository diretamente; o service não conhece `req` nem `res`. Cada camada só conhece a camada imediatamente abaixo.
+
+---
+
+## Estrutura do Projeto
+
+```text
+gcet908-trilha3-jogos-API em camadas/
+├── database/                     # Scripts SQL de referência
 │   ├── schema.sql
 │   ├── seed.sql
 │   └── queries.sql
 ├── prisma/
-│   ├── migrations/              # Migrations versionadas
-│   │   ├── ..._initial_schema/
-│   │   └── ..._add_desconto_jogo/
-│   ├── schema.prisma            # Fonte da verdade do modelo
-│   └── seed.js                  # Seed com 10+ registros por tabela
+│   ├── migrations/               # Migrations versionadas
+│   ├── schema.prisma             # Fonte da verdade do modelo
+│   └── seed.js                   # Seed reprodutível
 ├── src/
 │   ├── config/
-│   │   └── prisma.js            # Cliente Prisma com log de queries
-│   ├── errors/
-│   │   └── AppError.js          # Erro customizado
-│   ├── middlewares/
-│   │   └── errorHandler.js      # Tradução de erros do Prisma → HTTP
-│   ├── repositories/            # Acesso a dados via Prisma Client
-│   ├── controllers/             # Lógica dos endpoints
-│   ├── routes/                  # Rotas da API
-│   └── server.js                # Express configurado
-├── docker-compose.yml           # Bônus: banco executável em container
+│   │   ├── db.js                 # Configuração do banco
+│   │   └── prisma.js             # Cliente Prisma (Singleton)
+│   ├── controllers/              # Tradução HTTP ↔ domínio
+│   │   ├── jogosController.js
+│   │   ├── usuariosController.js
+│   │   └── avaliacoesController.js
+│   ├── errors/                   # Erros customizados
+│   │   └── AppError.js
+│   ├── middlewares/              # Preocupações transversais
+│   │   └── errorHandler.js
+│   ├── repositories/             # Acesso a dados isolado
+│   │   ├── jogosRepository.js
+│   │   ├── usuariosRepository.js
+│   │   └── avaliacoesRepository.js
+│   ├── routes/                   # Definição de rotas HTTP
+│   │   ├── jogosRoutes.js
+│   │   ├── usuariosRoutes.js
+│   │   └── avaliacoesRoutes.js
+│   ├── services/                 # Regras de negócio
+│   │   ├── jogosService.js
+│   │   ├── usuariosService.js
+│   │   └── avaliacoesService.js
+│   └── server.js                 # Ponto de entrada
+├── .dockerignore
 ├── .env.example
+├── .gitignore
+├── docker-compose.yml
+├── ESTRUTURA.md
 ├── package.json
+├── package-lock.json
 └── README.md
 ```
 
 ---
 
-## 🗺️ Diagrama Entidade-Relacionamento (DER)
+## Fluxo Completo de uma Requisição
+
+Exemplo: `POST /api/jogos` com um JSON no corpo.
 
 ```mermaid
-erDiagram
-    DESENVOLVEDORA ||--o{ JOGO : desenvolve
-    JOGO ||--o{ JOGO_GENERO : pertence
-    GENERO ||--o{ JOGO_GENERO : classifica
-    JOGO ||--o{ JOGO_PLATAFORMA : disponivel
-    PLATAFORMA ||--o{ JOGO_PLATAFORMA : hospeda
-    USUARIO ||--o{ BIBLIOTECA : possui
-    JOGO ||--o{ BIBLIOTECA : esta_em
-    USUARIO ||--o{ AVALIACAO : avalia
-    JOGO ||--o{ AVALIACAO : recebe
+sequenceDiagram
+    participant C as Cliente
+    participant R as Routes
+    participant CT as Controller
+    participant S as Service
+    participant RP as Repository
+    participant P as Prisma
+    participant D as PostgreSQL
 
-    DESENVOLVEDORA {
-        int id PK
-        string nome UK
-        string pais
-        datetime created_at
-        datetime updated_at
-        datetime deleted_at
-    }
-    JOGO {
-        int id PK
-        string titulo
-        int ano_lancamento
-        decimal preco
-        decimal desconto
-        string descricao
-        int desenvolvedora_id FK
-        datetime created_at
-        datetime updated_at
-        datetime deleted_at
-    }
-    GENERO {
-        int id PK
-        string nome UK
-        datetime created_at
-        datetime updated_at
-        datetime deleted_at
-    }
-    PLATAFORMA {
-        int id PK
-        string nome UK
-        datetime created_at
-        datetime updated_at
-        datetime deleted_at
-    }
-    JOGO_GENERO {
-        int jogo_id PK,FK
-        int genero_id PK,FK
-    }
-    JOGO_PLATAFORMA {
-        int jogo_id PK,FK
-        int plataforma_id PK,FK
-    }
-    USUARIO {
-        int id PK
-        string nome
-        string email UK
-        datetime created_at
-        datetime updated_at
-        datetime deleted_at
-    }
-    BIBLIOTECA {
-        int id PK
-        int usuario_id FK
-        int jogo_id FK
-        decimal horas_jogadas
-        datetime data_aquisicao
-        datetime created_at
-        datetime updated_at
-        datetime deleted_at
-    }
-    AVALIACAO {
-        int id PK
-        int usuario_id FK
-        int jogo_id FK
-        int nota
-        string comentario
-        datetime created_at
-        datetime updated_at
-        datetime deleted_at
-    }
+    C->>R: POST /api/jogos {dados}
+    R->>CT: jogosController.criar
+    CT->>CT: valida req.body
+    CT->>S: jogosService.criar(dados)
+    S->>S: aplica regras de negócio
+    S->>RP: jogosRepository.criar(dados)
+    RP->>P: prisma.jogo.create(...)
+    P->>D: INSERT INTO jogos
+    D-->>P: registro criado
+    P-->>RP: objeto Jogo
+    RP-->>S: objeto Jogo
+    S-->>CT: objeto Jogo
+    CT-->>R: res.status(201).json(jogo)
+    R-->>C: 201 Created + JSON
+
+    Note over CT,D: Se qualquer etapa lançar erro,<br/>o middleware de erro captura e formata a resposta
 ```
+
+### Passo a passo
+
+1. **Routes** recebe a URL e chama o controller correspondente
+2. **Controller** extrai dados da requisição (`req.body`) e chama o service
+3. **Service** aplica regras de negócio e chama o repository
+4. **Repository** executa a query via Prisma
+5. O caminho se inverte para montar a resposta
+6. Se algo falhar, o **middleware de erro** captura, formata e devolve uma resposta consistente
 
 ---
 
-## 🚀 Como Executar
+## Benefícios da Refatoração
+
+| Benefício | Como é alcançado |
+|---|---|
+| **Baixo acoplamento** | Cada camada conhece apenas a imediatamente abaixo |
+| **Testabilidade** | Services podem ser testados isoladamente, sem HTTP nem banco real |
+| **Manutenibilidade** | Mudar o ORM exige alterar apenas os repositories |
+| **Reusabilidade** | O mesmo service pode ser chamado por CLI, jobs ou outros controllers |
+| **Separação de preocupações** | Cada arquivo tem uma responsabilidade única e clara |
+
+---
+
+## Como Executar
 
 ### Pré-requisitos
 
@@ -142,8 +192,8 @@ erDiagram
 ### 1. Clonar e instalar
 
 ```bash
-git clone https://github.com/Avlis1412/gcet908-trilha2-jogos.git
-cd gcet908-trilha2-jogos
+git clone <URL-DO-REPOSITORIO>
+cd "gcet908-trilha3-jogos- API em camadas"
 npm install
 ```
 
@@ -159,6 +209,7 @@ Edite com suas credenciais:
 
 ```env
 PORT=3000
+NODE_ENV=development
 DATABASE_URL="postgresql://postgres:SUA_SENHA@localhost:5432/jogos_db?schema=public"
 ```
 
@@ -174,27 +225,10 @@ CREATE DATABASE jogos_db;
 npx prisma migrate dev
 ```
 
-Isso aplica **todas as migrations versionadas** e gera o Prisma Client.
-
 ### 5. Popular o banco (seed)
 
 ```bash
 npx prisma db seed
-```
-
-Saída esperada:
-
-```
-🌱 Iniciando seed...
-✅ Seed concluído: {
-  desenvolvedoras: 10,
-  generos: 10,
-  plataformas: 10,
-  usuarios: 10,
-  jogos: 12,
-  bibliotecas: 15,
-  avaliacoes: 19
-}
 ```
 
 ### 6. Rodar a API
@@ -203,152 +237,68 @@ Saída esperada:
 npm run dev
 ```
 
-Saída esperada:
-
-```
-🚀 Servidor rodando em http://localhost:3000
-prisma:info Starting a postgresql pool with 9 connections.
-```
-
----
-
-## 🐳 Alternativa com Docker (bônus)
-
-Se preferir, suba o banco via Docker Compose:
+### 7. Testar
 
 ```bash
-docker compose up -d
+curl.exe http://localhost:3000/api/jogos
+curl.exe http://localhost:3000/api/usuarios
+curl.exe http://localhost:3000/api/avaliacoes/jogo/1
 ```
-
-Isso cria um PostgreSQL 16 na porta 5432 com usuário `postgres`, senha `postgres` e banco `jogos_db`.
 
 ---
 
-## 📡 Endpoints
+## Endpoints
 
-### 🎮 Jogos
+### Jogos
 
 | Método | Rota | Descrição |
 |--------|------|-----------|
-| GET | `/api/jogos` | Lista com paginação, filtro e ordenação |
-| GET | `/api/jogos/:id` | Detalhes com relacionamentos |
-| GET | `/api/jogos/top-avaliados` | Top 5 (via SQL puro) |
-| POST | `/api/jogos` | Cria jogo |
-| PUT | `/api/jogos/:id` | Atualiza jogo |
-| DELETE | `/api/jogos/:id` | Soft delete (deleted_at) |
+| GET | `/api/jogos` | Lista todos os jogos |
+| GET | `/api/jogos/:id` | Detalhes de um jogo |
+| POST | `/api/jogos` | Cria um jogo |
+| PUT | `/api/jogos/:id` | Atualiza um jogo |
+| DELETE | `/api/jogos/:id` | Remove um jogo |
 
-**Filtros e ordenação:**
-
-```
-GET /api/jogos?titulo=zelda&genero=Aventura&page=1&limit=5&ordenar=preco&direcao=desc
-```
-
-**Body de criação:**
-
-```json
-{
-  "titulo": "Hollow Knight",
-  "ano_lancamento": 2017,
-  "preco": 46.99,
-  "desenvolvedora_id": 9,
-  "descricao": "Metroidvania indie"
-}
-```
-
-### 👤 Usuários
+### Usuários
 
 | Método | Rota | Descrição |
 |--------|------|-----------|
-| GET | `/api/usuarios` | Lista usuários |
-| GET | `/api/usuarios/:id` | Busca por ID |
-| GET | `/api/usuarios/:id/biblioteca` | Biblioteca do usuário |
-| POST | `/api/usuarios` | Cria usuário |
-| PUT | `/api/usuarios/:id` | Atualiza |
-| DELETE | `/api/usuarios/:id` | Soft delete |
+| GET | `/api/usuarios` | Lista todos os usuários |
+| GET | `/api/usuarios/:id` | Detalhes de um usuário |
+| POST | `/api/usuarios` | Cria um usuário |
+| PUT | `/api/usuarios/:id` | Atualiza um usuário |
+| DELETE | `/api/usuarios/:id` | Remove um usuário |
 
-### ⭐ Avaliações
+### Avaliações
 
 | Método | Rota | Descrição |
 |--------|------|-----------|
-| POST | `/api/avaliacoes` | Registra/atualiza avaliação (UPSERT transacional) |
-| GET | `/api/avaliacoes/jogo/:jogoId` | Avaliações de um jogo |
+| POST | `/api/avaliacoes` | Registra ou atualiza uma avaliação |
+| GET | `/api/avaliacoes/jogo/:jogoId` | Lista avaliações de um jogo |
 
 ---
 
-## ⚙️ Boas Práticas Aplicadas
+## Padrões de Projeto Aplicados
 
-### ORM e Migrations
-- **Schema declarativo** (`schema.prisma`) como fonte da verdade
-- **2 migrations versionadas**: `initial_schema` e `add_desconto_jogo`
-- **Seed generoso** com 10+ registros por tabela principal
-- **Prisma Client** gerado automaticamente
-
-### Integridade e Transações
-- **Validação de FK** antes de criar avaliações (transação)
-- **UPSERT** com `ON CONFLICT` para avaliações idempotentes
-- **Soft delete** via `deletedAt` — bonificação
-- **Erros do Prisma traduzidos**: P2002 → 409, P2003 → 409, P2025 → 404
-
-### Performance
-- **Log de SQL ativado** (`log: ['query']`) — todas as queries visíveis
-- **Batching automático** do Prisma (evita N+1)
-- **Índices** em `titulo`, `desenvolvedora_id`, `usuario_id`, `jogo_id`
-- **Paginação real** no banco (`skip`/`take`)
-- **Filtros dinâmicos** aplicados no SQL (não em memória)
-
-### Arquitetura
-- **Separação em camadas**: routes → controllers → repositories
-- **Controllers enxutos** (não contêm SQL)
-- **Middleware de erro** centralizado
-- **AppError** para erros de negócio
-
-### Auditoria
-- `created_at`, `updated_at` (com `@updatedAt`) e `deleted_at` em todas as tabelas principais
+| Padrão | Onde está | Problema que resolve |
+|---|---|---|
+| **MVC** | Arquitetura geral | Separa a tradução HTTP do domínio, permitindo evoluir um sem afetar o outro |
+| **Repository** | `src/repositories/` | Isola o Prisma. Trocar o ORM não exige mudanças em services/controllers |
+| **Singleton** | `src/config/prisma.js` | Uma única instância do PrismaClient evita múltiplas conexões abertas |
+| **Middleware chain** | `src/middlewares/errorHandler.js` | Tratamento centralizado de erros sem repetir `try/catch` em cada rota |
 
 ---
 
-## 🧪 Testando Erros de Integridade
+## Comportamento Preservado
 
-**UNIQUE violation (409):**
-```bash
-curl -X POST http://localhost:3000/api/usuarios \
-  -H "Content-Type: application/json" \
-  -d '{"nome":"Teste","email":"ana@email.com"}'
-```
-→ `{"erro":"Valor duplicado no campo: email","tipo":"unique_violation"}`
-
-**FK violation (409):**
-```bash
-curl -X POST http://localhost:3000/api/jogos \
-  -H "Content-Type: application/json" \
-  -d '{"titulo":"X","ano_lancamento":2024,"preco":10,"desenvolvedora_id":99999}'
-```
-→ `{"erro":"Operação viola integridade referencial","tipo":"foreign_key_violation"}`
-
-**404:**
-```bash
-curl http://localhost:3000/api/jogos/99999
-```
-→ `{"erro":"Jogo não encontrado","tipo":"app_error"}`
+Todos os endpoints do Trabalho 2 continuam funcionando de forma idêntica. A refatoração foi **interna** — a API não mudou para quem a consome.
 
 ---
 
-## 🛠️ Tecnologias
-
-| Camada | Tecnologia |
-|--------|------------|
-| Banco | PostgreSQL 16 |
-| ORM | **Prisma 6.19.3** |
-| Runtime | Node.js 18+ |
-| Framework | Express |
-| Dev | nodemon |
-| Container | Docker Compose |
-
----
-
-## 👤 Autor
+## Autor
 
 **Adriano Rodrigues da Silva**
+
 - Matrícula: 2025133735
 - Curso: Licenciatura em Computação (EaD/UAB) — UFRB
 - Disciplina: GCET908 — Desenvolvimento de Software II
@@ -356,6 +306,6 @@ curl http://localhost:3000/api/jogos/99999
 
 ---
 
-## 📄 Licença
+## Licença
 
 Projeto acadêmico desenvolvido para a disciplina GCET908.
